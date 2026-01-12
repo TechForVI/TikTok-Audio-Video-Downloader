@@ -392,7 +392,7 @@ layout = {
     padding = "10dp",
     {
         TextView,
-        text = "Developer: Sabir Jamil",
+        text = "Developer: Sabir 555 Jamil",
         textColor = 0xFFBB86FC,
         textSize = "14sp",
         layout_marginTop = "2dp",
