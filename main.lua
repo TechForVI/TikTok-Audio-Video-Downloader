@@ -20,7 +20,7 @@ import "java.io.File"
 
 activity = this
 
-local CURRENT_VERSION = "1.0"
+local CURRENT_VERSION = "1.1"
 local GITHUB_RAW_URL = "https://raw.githubusercontent.com/TechForVI/TikTok-Audio-Video-Downloader/main/"
 local VERSION_URL = GITHUB_RAW_URL .. "version.txt"
 local SCRIPT_URL = GITHUB_RAW_URL .. "main.lua"
@@ -45,23 +45,63 @@ function checkUpdate()
   end)
 end
 
+function restartPlugin()
+    -- پلگ ان کو ریسٹارٹ کرنے کا طریقہ
+    local handler = luajava.bindClass("android.os.Handler")(activity.getMainLooper())
+    handler.postDelayed(luajava.createProxy("java.lang.Runnable", {
+        run = function()
+            -- موجودہ ڈائیلاگ بند کریں
+            if dlg then
+                dlg.dismiss()
+            end
+            
+            -- نئی پلگ ان لوڈ کریں - نئے طریقے سے
+            local intent = Intent(Intent.ACTION_MAIN)
+            intent.setClassName(activity.getPackageName(), "com.nirenr.talkman.TalkManActivity")
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK)
+            activity.startActivity(intent)
+        end
+    }), 1500) -- 1.5 سیکنڈ کا ڈیلی
+end
+
 function downloadAndInstallUpdate()
-  Http.get(SCRIPT_URL, function(code, newContent)
-    if code == 200 and newContent then
-      local tempPath = PLUGIN_PATH .. ".tmp"
-      local f = io.open(tempPath, "w")
-      if f then
-        f:write(newContent)
-        f:close()
-        os.remove(PLUGIN_PATH)
-        os.rename(tempPath, PLUGIN_PATH)
-        service.speak("Update successful! Please restart the plugin.")
-        activity.finish()
-      end
-    else
-      service.speak("Update failed.")
-    end
-  end)
+    Http.get(SCRIPT_URL, function(code, newContent)
+        if code == 200 and newContent then
+            local tempPath = PLUGIN_PATH .. ".tmp"
+            local f = io.open(tempPath, "w")
+            if f then
+                f:write(newContent)
+                f:close()
+                
+                -- پرانا فائل ڈیلیٹ کریں
+                local oldFile = File(PLUGIN_PATH)
+                if oldFile.exists() then
+                    oldFile.delete()
+                end
+                
+                -- نیا فائل رینیم کریں
+                local newFile = File(tempPath)
+                newFile.renameTo(File(PLUGIN_PATH))
+                
+                -- سپیچ فیڈ بیک دیں
+                service.speak("Update completed successfully! Plugin will restart automatically in 3 seconds.")
+                
+                -- تھوڑی دیر انتظار کریں اور پھر ریسٹارٹ کریں
+                local handler = luajava.bindClass("android.os.Handler")(activity.getMainLooper())
+                handler.postDelayed(luajava.createProxy("java.lang.Runnable", {
+                    run = function()
+                        service.speak("Restarting plugin now.")
+                        restartPlugin()
+                    end
+                }), 3000) -- 3 سیکنڈ کے بعد ریسٹارٹ
+                
+            else
+                service.speak("Update failed. Cannot write file.")
+            end
+        else
+            service.speak("Update failed. Cannot download new version.")
+        end
+    end)
 end
 
 checkUpdate()
@@ -392,7 +432,7 @@ layout = {
     padding = "10dp",
     {
         TextView,
-        text = "Developer: Sabir Jamil",
+        text = "Developer: Mohammad Sabir Jamil",
         textColor = 0xFFBB86FC,
         textSize = "14sp",
         layout_marginTop = "2dp",
