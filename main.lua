@@ -53,13 +53,18 @@ function downloadAndInstallUpdate()
       if f then
         f:write(newContent)
         f:close()
+        -- پرانی فائل ہٹانے اور نئی فائل سیٹ کرنے کا عمل
         os.remove(PLUGIN_PATH)
-        os.rename(tempPath, PLUGIN_PATH)
-        service.speak("Update successful! Please restart the plugin.")
-        activity.finish()
+        if os.rename(tempPath, PLUGIN_PATH) then
+           service.speak("Update successful! Please restart the plugin.")
+           -- یہاں activity.finish کی ضرورت نہیں، صرف ڈائیلاگ بند کریں
+           if dlg then dlg.dismiss() end 
+        else
+           service.speak("Failed to replace the plugin file.")
+        end
       end
     else
-      service.speak("Update failed.")
+      service.speak("Update download failed.")
     end
   end)
 end
