@@ -20,48 +20,161 @@ import "java.io.File"
 
 activity = this
 
-local CURRENT_VERSION = "1.1"
+local CURRENT_VERSION = "1.2"
 local GITHUB_RAW_URL = "https://raw.githubusercontent.com/TechForVI/TikTok-Audio-Video-Downloader/main/"
 local VERSION_URL = GITHUB_RAW_URL .. "version.txt"
 local SCRIPT_URL = GITHUB_RAW_URL .. "main.lua"
 local PLUGIN_PATH = "/sdcard/解说/Plugins/TikTok Audio Video Downloader/main.lua"
 
+local updateInProgress = false
+local updateDlg = nil
+
 function checkUpdate()
-  Http.get(VERSION_URL, function(code, onlineVersion)
-    if code == 200 and onlineVersion then
-      onlineVersion = tostring(onlineVersion):match("^%s*(.-)%s*$")
-      if onlineVersion ~= CURRENT_VERSION then
-        local updateDlg = LuaDialog(activity)
-        updateDlg.setTitle("New Update Available!")
-        updateDlg.setMessage("A new version (" .. onlineVersion .. ") is available. Would you like to update now?")
-        updateDlg.setButton("Update Now", function()
-          service.speak("Downloading update, please wait...")
-          downloadAndInstallUpdate()
-        end)
-        updateDlg.setButton2("Later", nil)
-        updateDlg.show()
-      end
-    end
-  end)
+    if updateInProgress then return end
+    
+    Http.get(VERSION_URL, function(code, onlineVersion)
+        if code == 200 and onlineVersion then
+            onlineVersion = tostring(onlineVersion):match("^%s*(.-)%s*$")
+            if onlineVersion and onlineVersion ~= CURRENT_VERSION then
+                showUpdateDialog(onlineVersion)
+            end
+        end
+    end)
+end
+
+function showUpdateDialog(onlineVersion)
+    updateDlg = LuaDialog(activity)
+    updateDlg.setTitle("New Update Available!")
+    updateDlg.setMessage("A new version (" .. onlineVersion .. ") is available. Would you like to update now?")
+    
+    updateDlg.setButton("Update Now", function()
+        updateDlg.dismiss()
+        service.speak("Downloading update, please wait...")
+        downloadAndInstallUpdate()
+    end)
+    
+    updateDlg.setButton2("Later", function()
+        updateDlg.dismiss()
+    end)
+    
+    updateDlg.show()
 end
 
 function downloadAndInstallUpdate()
-  Http.get(SCRIPT_URL, function(code, newContent)
-    if code == 200 and newContent then
-      local tempPath = PLUGIN_PATH .. ".tmp"
-      local f = io.open(tempPath, "w")
-      if f then
-        f:write(newContent)
-        f:close()
-        os.remove(PLUGIN_PATH)
-        os.rename(tempPath, PLUGIN_PATH)
-        service.speak("Update successful! Please restart the plugin.")
-        activity.finish()
-      end
-    else
-      service.speak("Update failed.")
+    updateInProgress = true
+    
+    local function performUpdate()
+        Http.get(SCRIPT_URL, function(code, newContent)
+            if code == 200 and newContent then
+                local tempPath = PLUGIN_PATH .. ".temp_update"
+                local backupPath = PLUGIN_PATH .. ".backup"
+                
+                local function restoreFromBackup()
+                    if File(backupPath).exists() then
+                        os.rename(backupPath, PLUGIN_PATH)
+                        return true
+                    end
+                    return false
+                end
+                
+                local function cleanupFiles()
+                    pcall(function() os.remove(tempPath) end)
+                    pcall(function() os.remove(backupPath) end)
+                end
+                
+                local f = io.open(tempPath, "w")
+                if f then
+                    f:write(newContent)
+                    f:close()
+                    
+                    if File(PLUGIN_PATH).exists() then
+                        local backupFile = io.open(PLUGIN_PATH, "r")
+                        if backupFile then
+                            local backupContent = backupFile:read("*a")
+                            backupFile:close()
+                            local bf = io.open(backupPath, "w")
+                            if bf then
+                                bf:write(backupContent)
+                                bf:close()
+                            end
+                        end
+                    end
+                    
+                    local success = pcall(function()
+                        os.remove(PLUGIN_PATH)
+                        os.rename(tempPath, PLUGIN_PATH)
+                    end)
+                    
+                    if success then
+                        cleanupFiles()
+                        
+                        local successDialog = LuaDialog(activity)
+                        successDialog.setTitle("Update Successful")
+                        successDialog.setMessage("Please restart the plugin.")
+                        successDialog.setButton("OK", function()
+                            successDialog.dismiss()
+                            service.speak("Update successful. Please restart plugin.")
+                            
+                            local handler = luajava.bindClass("android.os.Handler")(activity.getMainLooper())
+                            handler.postDelayed(luajava.createProxy("java.lang.Runnable", {
+                                run = function()
+                                    if dlg and dlg.dismiss then
+                                        dlg.dismiss()
+                                    end
+                                end
+                            }), 1000)
+                        end)
+                        successDialog.show()
+                    else
+                        local restored = restoreFromBackup()
+                        cleanupFiles()
+                        
+                        local errorDialog = LuaDialog(activity)
+                        if restored then
+                            errorDialog.setTitle("Update Failed")
+                            errorDialog.setMessage("Update failed. Old version restored.")
+                        else
+                            errorDialog.setTitle("Update Failed")
+                            errorDialog.setMessage("Update failed. Please try again.")
+                        end
+                        errorDialog.setButton("OK", function()
+                            errorDialog.dismiss()
+                            if restored then
+                                service.speak("Update failed, old version restored.")
+                            else
+                                service.speak("Update failed, please try again.")
+                            end
+                        end)
+                        errorDialog.show()
+                    end
+                else
+                    local errorDialog = LuaDialog(activity)
+                    errorDialog.setTitle("Update Failed")
+                    errorDialog.setMessage("Cannot write temporary file.")
+                    errorDialog.setButton("OK", function()
+                        errorDialog.dismiss()
+                        service.speak("Update failed, cannot write file.")
+                    end)
+                    errorDialog.show()
+                end
+            else
+                local errorDialog = LuaDialog(activity)
+                errorDialog.setTitle("Update Failed")
+                errorDialog.setMessage("Cannot download new script.")
+                errorDialog.setButton("OK", function()
+                    errorDialog.dismiss()
+                    service.speak("Update failed, download error.")
+                end)
+                errorDialog.show()
+            end
+            updateInProgress = false
+        end)
     end
-  end)
+    
+    local handler = luajava.bindClass("android.os.Handler")(activity.getMainLooper())
+    handler.postDelayed(luajava.createProxy("java.lang.Runnable", {
+        run = performUpdate
+    }), 500)
 end
 
 checkUpdate()
@@ -392,7 +505,7 @@ layout = {
     padding = "10dp",
     {
         TextView,
-        text = "Developer: Sabir 555 Jamil",
+        text = "Developer: Sabir Jamil",
         textColor = 0xFFBB86FC,
         textSize = "14sp",
         layout_marginTop = "2dp",
@@ -472,7 +585,7 @@ layout = {
         gravity="center",
         {
             TextView,
-            text="鉁 Direct Link Found",
+            text="✅ Direct Link Found",
             textSize="20sp",
             textColor=0xFF00FF00,
             typeface=Typeface.DEFAULT_BOLD,
