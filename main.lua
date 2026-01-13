@@ -20,7 +20,7 @@ import "java.io.File"
 
 activity = this
 
-local CURRENT_VERSION = "1.3"
+local CURRENT_VERSION = "1.5"
 local GITHUB_RAW_URL = "https://raw.githubusercontent.com/TechForVI/TikTok-Audio-Video-Downloader/main/"
 local VERSION_URL = GITHUB_RAW_URL .. "version.txt"
 local SCRIPT_URL = GITHUB_RAW_URL .. "main.lua"
@@ -505,7 +505,7 @@ layout = {
     padding = "10dp",
     {
         TextView,
-        text = "Developer: Hanzla",
+        text = "Developer: i love babu",
         textColor = 0xFFBB86FC,
         textSize = "14sp",
         layout_marginTop = "2dp",
